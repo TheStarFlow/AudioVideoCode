@@ -1,4 +1,4 @@
-package com.yougu.audiopcm;
+package com.zzs.media.muxer;
 
 import android.content.Context;
 import android.media.AudioFormat;
@@ -7,11 +7,9 @@ import android.media.MediaCodecInfo;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
 import android.media.MediaMuxer;
-import android.util.Log;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -41,21 +39,26 @@ public class VideoProcess {
         final File videoPcm = new File(cache, "videoPcm.pcm");
         final File musicPcm = new File(cache, "musicPcm.pcm");
         final File mixPcm = new File(cache, "adjustPcm.pcm");
+
         decodeToPcm(videoPath, videoPcm.getAbsolutePath(), startUs, endUs);
         File videoPcmFile = new File(cache, videoPcm.getName() + ".wav");
         new PcmToWavUtil(44100, AudioFormat.CHANNEL_IN_STEREO,
                 1, AudioFormat.ENCODING_PCM_16BIT).pcmToWav(videoPcm.getAbsolutePath()
                 , videoPcmFile.getAbsolutePath());
+
         decodeToPcm(musicPath, musicPcm.getAbsolutePath(), startUs, endUs);
         File musicPcmFile = new File(cache, musicPcm.getName() + ".wav");
         new PcmToWavUtil(44100, AudioFormat.CHANNEL_IN_STEREO,
                 1, AudioFormat.ENCODING_PCM_16BIT).pcmToWav(musicPcm.getAbsolutePath()
                 , musicPcmFile.getAbsolutePath());
+
         remixPcm(videoPcm.getAbsolutePath(), musicPcm.getAbsolutePath(), mixPcm.getAbsolutePath(), videoVolume, musicVolume);
         File wavFile = new File(cache, mixPcm.getName() + ".wav");
         new PcmToWavUtil(44100, AudioFormat.CHANNEL_IN_STEREO,
                 2, AudioFormat.ENCODING_PCM_16BIT).pcmToWav(mixPcm.getAbsolutePath()
                 , wavFile.getAbsolutePath());
+
+        
         mixVideoAndMusic(videoPath,outputPath,startUs,endUs,wavFile);
 
 
@@ -67,7 +70,7 @@ public class VideoProcess {
         if (file.exists()){
             file.delete();
         }
-        //初始化一个媒体文件封装容器
+        //初始化一个媒体文件（mp4等封装格式）封装容器
         MediaMuxer mediaMuxer = new MediaMuxer(output, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
         //视频解析器
         MediaExtractor videoExtractor = new MediaExtractor();
@@ -274,7 +277,6 @@ public class VideoProcess {
                 }
                 if (!end2) {
                     end2 = (is2.read(buffer2) == -1);
-                    int voice = 0;
                     for (int i = 0; i < buffer2.length; i += 2) {
                         temp1 = (short) ((buffer1[i] & 0xff) | (buffer1[i + 1] & 0xff) << 8);
                         temp2 = (short) ((buffer2[i] & 0xff) | (buffer2[i + 1] & 0xff) << 8);

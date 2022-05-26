@@ -1,4 +1,4 @@
-package com.yougu.audiopcm;
+package com.zzs.media.muxer;
 
 import android.media.AudioFormat;
 import android.media.AudioRecord;

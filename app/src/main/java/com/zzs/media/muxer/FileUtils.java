@@ -1,14 +1,11 @@
-package com.yougu.audiopcm;
+package com.zzs.media.muxer;
 
-import android.content.res.AssetFileDescriptor;
 import android.os.Environment;
 import android.util.Log;
 
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.nio.channels.FileChannel;
 
 public class FileUtils {
     private static final String TAG = "David";

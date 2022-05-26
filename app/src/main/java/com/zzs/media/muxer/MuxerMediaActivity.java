@@ -1,4 +1,4 @@
-package com.yougu.audiopcm;
+package com.zzs.media.muxer;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -16,11 +16,9 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.View;
 import android.widget.SeekBar;
-import android.widget.Toast;
 
-import com.google.android.material.slider.BaseOnSliderTouchListener;
 import com.google.android.material.slider.RangeSlider;
-import com.yougu.audiopcm.databinding.ActivityMainBinding;
+import com.zzs.media.databinding.ActivityMuxerMediaBinding;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -31,9 +29,13 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends AppCompatActivity implements RangeSlider.OnChangeListener, SeekBar.OnSeekBarChangeListener {
+/**
+ * 音频与视频混音剪辑
+ * */
 
-    private ActivityMainBinding binding;
+public class MuxerMediaActivity extends AppCompatActivity implements RangeSlider.OnChangeListener, SeekBar.OnSeekBarChangeListener {
+
+    private ActivityMuxerMediaBinding binding;
     private float startValue = 0f;
     private float endValue = 0f;
     private int videoVolume = 0;
@@ -49,7 +51,7 @@ public class MainActivity extends AppCompatActivity implements RangeSlider.OnCha
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        binding = ActivityMainBinding.inflate(getLayoutInflater());
+        binding = ActivityMuxerMediaBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
         if (getSupportActionBar() != null) {
             getSupportActionBar().hide();
@@ -85,6 +87,9 @@ public class MainActivity extends AppCompatActivity implements RangeSlider.OnCha
 
                 } catch (Exception e) {
                     e.printStackTrace();
+                }
+                finally {
+                    progressDialog.dismiss();
                 }
 
             }
@@ -150,7 +155,7 @@ public class MainActivity extends AppCompatActivity implements RangeSlider.OnCha
                 try {
                     MediaMetadataRetriever metadataRetriever = new MediaMetadataRetriever();
                     metadataRetriever.setDataSource(videoPath);
-                    final long duration = Integer.parseInt(metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION))*1000;
+                    final long duration = Integer.parseInt(metadataRetriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION))* 1000L;
                     runOnUiThread(new Runnable() {
                         @Override
                         public void run() {
