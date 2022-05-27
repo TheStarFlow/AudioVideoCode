@@ -3,7 +3,6 @@ package com.zzs.media.record2aac
 import android.Manifest
 import android.media.*
 import android.os.Bundle
-import android.os.Environment
 import android.util.Log
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
@@ -34,6 +33,8 @@ class RecordToAACActivity : AppCompatActivity() {
         const val AUDIO_CHANNEL = AudioFormat.CHANNEL_IN_MONO //音频声道 单声道
     }
 
+    var pcmFile = ""
+
     @Volatile
     private var isRecording = false
     private var miniBufferSize = 0
@@ -45,7 +46,8 @@ class RecordToAACActivity : AppCompatActivity() {
         binding = ActivityRecord2AacBinding.inflate(layoutInflater)
         setContentView(binding.root)
         initAudioRecord()
-        val path = cacheDir.absolutePath+"/record.aac"
+        pcmFile = cacheDir.absolutePath + "/record.pcm"
+        val path = cacheDir.absolutePath + "/record.aac"
         binding.startRecord.onClick {
             startRecord(path)
         }
@@ -118,7 +120,7 @@ class RecordToAACActivity : AppCompatActivity() {
         val startTime = System.nanoTime()
         val mediaInfo = MediaCodec.BufferInfo()
         val outputFile = File(path)
-        if (outputFile.exists()){
+        if (outputFile.exists()) {
             outputFile.delete()
         }
         outputFile.createNewFile()
@@ -126,38 +128,188 @@ class RecordToAACActivity : AppCompatActivity() {
         try {
             showLogI("开始编码，存储路径${outputFile.absolutePath}")
             while (isRecording || mPcmCacheData.isNotEmpty()) {
-                val pcmData = mPcmCacheData.poll()?:continue
-                showLoge("取出pcm数据，---》长度${pcmData.size}")
+                val pcmData = mPcmCacheData.poll() ?: continue
                 val inputBufferIndex = mMediaCodec.dequeueInputBuffer(1000)
-                if (inputBufferIndex>=0){
+                if (inputBufferIndex >= 0) {
                     val inputBuffer = mMediaCodec.getInputBuffer(inputBufferIndex)
                     inputBuffer?.clear()
-                    inputBuffer?.put(pcmData,0,pcmData.size)
-                    mMediaCodec.queueInputBuffer(inputBufferIndex,0,pcmData.size,(System.nanoTime()-startTime)/1000,0)
-                    var outputBufferIndex = mMediaCodec.dequeueOutputBuffer(mediaInfo,1000)
-                    while (outputBufferIndex>=0){
+                    inputBuffer?.put(pcmData, 0, pcmData.size)
+                    mMediaCodec.queueInputBuffer(
+                        inputBufferIndex,
+                        0,
+                        pcmData.size,
+                        (System.nanoTime() - startTime) / 1000,
+                        0
+                    )
+                    var outputBufferIndex = mMediaCodec.dequeueOutputBuffer(mediaInfo, 1000)
+                    while (outputBufferIndex >= 0) {
                         val outputBuffer = mMediaCodec.getOutputBuffer(outputBufferIndex)
                         outputBuffer?.position(mediaInfo.offset)
-                        val encodeData = ByteArray(mediaInfo.size+7)//添加aac编码头
-                        addADTStoPacket(encodeData,encodeData.size)
-                        showLogI("获取编码后数据长度${mediaInfo.size}")
-                        outputBuffer?.get(encodeData,7,mediaInfo.size)
+                        val encodeData = ByteArray(mediaInfo.size + 7)//添加aac编码头
+                        addADTStoPacket(encodeData, encodeData.size)
+                        outputBuffer?.get(encodeData, 7, mediaInfo.size)
                         outputBuffer?.clear()
                         fos.write(encodeData)
                         fos.flush()
-                        mMediaCodec.releaseOutputBuffer(outputBufferIndex,false)
-                        outputBufferIndex = mMediaCodec.dequeueOutputBuffer(mediaInfo,1000)
+                        mMediaCodec.releaseOutputBuffer(outputBufferIndex, false)
+                        outputBufferIndex = mMediaCodec.dequeueOutputBuffer(mediaInfo, 1000)
 
                     }
                 }
             }
-        }finally {
+        } finally {
             mMediaCodec.stop()
             mMediaCodec.release()
             fos.close()
             showLogI("编码完成，输出文件")
+            runOnUiThread {
+                showFileOutput(outputFile)
+            }
         }
 
+    }
+
+    private fun showFileOutput(outputFile: File) {
+        binding.resulyLayout.visibility = View.VISIBLE
+        binding.recordFileName.text = outputFile.name
+        binding.filePath.text = outputFile.absolutePath
+        binding.playRecord.onClick {
+            playRecord(outputFile)
+        }
+    }
+
+    /**
+     *
+     * aac解码播放文件
+     * */
+    private fun playRecord(outputFile: File) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val mediaExtractor = MediaExtractor()
+            mediaExtractor.setDataSource(outputFile.absolutePath)
+            val count = mediaExtractor.trackCount
+            var index = -1
+            for (i in 0 until count) {
+                val trackFormat = mediaExtractor.getTrackFormat(i)
+                val type = trackFormat.getString(MediaFormat.KEY_MIME)
+                if (type.startsWith("audio/")) {
+                    index = i
+                    break
+                }
+            }
+            if (index == -1) {
+                mediaExtractor.release()
+                return@launch
+            }
+            decodeAndPlay(mediaExtractor, index)
+        }
+    }
+
+    private fun decodeAndPlay(mediaExtractor: MediaExtractor, index: Int) {
+        val file = File(pcmFile)
+        if (file.exists()){
+            file.delete()
+        }
+        file.createNewFile()
+        val channel = FileOutputStream(file).channel
+        mediaExtractor.selectTrack(index)
+       // mediaExtractor.seekTo(0,MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        val format = mediaExtractor.getTrackFormat(index)
+        var maxBuffer = 4096
+        if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
+            maxBuffer = format.getInteger(MediaFormat.KEY_MAX_INPUT_SIZE)
+        }
+        val mime = format.getString(MediaFormat.KEY_MIME) ?: return
+        val mediaCodec = MediaCodec.createDecoderByType(mime)
+        mediaCodec.configure(format, null, null, 0)
+        val readAACBuffer = ByteBuffer.allocateDirect(maxBuffer)
+        val mediaInfo = MediaCodec.BufferInfo()
+        mediaCodec.start()
+        var inputBufferIndex = -1
+        val attributeBuilder = AudioAttributes.Builder()
+        attributeBuilder.setUsage(AudioAttributes.USAGE_MEDIA)
+            .setLegacyStreamType(AudioManager.STREAM_MUSIC)
+            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+        val formatBuilder = AudioFormat.Builder()
+        formatBuilder.setSampleRate(format.getInteger(MediaFormat.KEY_SAMPLE_RATE))
+            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+            .setEncoding(AUDIO_PCM_BIT)
+        val mini = AudioTrack.getMinBufferSize(
+            AUDIO_SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO,
+            AUDIO_PCM_BIT
+        )
+        val audioTrack = AudioTrack(
+            AudioManager.STREAM_SYSTEM,
+            format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
+            AudioFormat.CHANNEL_OUT_MONO,
+            AUDIO_PCM_BIT,
+            mini,
+            AudioTrack.MODE_STREAM
+        )
+//        val audioTrack = AudioTrack(
+//            attributeBuilder.build(),
+//            formatBuilder.build(),
+//            miniBufferSize,
+//            AudioTrack.MODE_STREAM,
+//            AudioManager.AUDIO_SESSION_ID_GENERATE
+//        )
+        audioTrack.play()
+        var isEnd = false
+        while (!isEnd) {
+            inputBufferIndex = mediaCodec.dequeueInputBuffer(1000)
+            if (inputBufferIndex >= 0) {
+                val inputBuffer = mediaCodec.getInputBuffer(inputBufferIndex)
+                inputBuffer?.clear()
+                val pts = mediaExtractor.sampleTime
+                if (pts.toInt() == -1){
+                    break
+                }
+                mediaInfo.presentationTimeUs = pts
+                mediaInfo.flags = mediaExtractor.sampleFlags
+                mediaInfo.size = mediaExtractor.readSampleData(readAACBuffer, 0)
+                inputBuffer?.put(readAACBuffer)
+                readAACBuffer.flip()
+                mediaCodec.queueInputBuffer(
+                    inputBufferIndex,
+                    0,
+                    mediaInfo.size,
+                    mediaInfo.presentationTimeUs,
+                    mediaInfo.flags
+                )
+               // showLogI("写入aac数据， len = ${mediaInfo.size},pts = ${mediaInfo.presentationTimeUs}, flags = ${mediaInfo.flags} \n")
+                if (!mediaExtractor.advance()){
+                    isEnd = true
+                    break
+                }
+                var outputBufferIndex = mediaCodec.dequeueOutputBuffer(mediaInfo, 1000)
+                while (outputBufferIndex >= 0) {
+                    if (mediaInfo.flags == MediaCodec.BUFFER_FLAG_END_OF_STREAM) {
+                        isEnd = true
+                        break
+                    }
+                    val outputBuffer = mediaCodec.getOutputBuffer(outputBufferIndex)
+                    channel.write(outputBuffer)
+                    outputBuffer?.position(mediaInfo.offset)
+                    outputBuffer?.run {
+                        audioTrack.write(
+                            outputBuffer,
+                            mediaInfo.size,
+                            AudioTrack.WRITE_BLOCKING
+                        )
+                    }
+                    mediaCodec.releaseOutputBuffer(outputBufferIndex, false)
+                    outputBufferIndex = mediaCodec.dequeueOutputBuffer(mediaInfo, 1000)
+                }
+                readAACBuffer.clear()
+                readAACBuffer.flip()
+            }
+        }
+        channel.close()
+        showLogI("写出文件完毕")
+        audioTrack.stop()
+        audioTrack.release()
+        mediaCodec.stop()
+        mediaCodec.release()
+        mediaExtractor.release()
     }
 
     /**
@@ -207,10 +359,11 @@ class RecordToAACActivity : AppCompatActivity() {
         mAudioRecorder.release()
     }
 
-    private fun showLogI(msg:String){
-        Log.i(javaClass.simpleName,"--->$msg")
+    private fun showLogI(msg: String) {
+        Log.i(javaClass.simpleName, "--->$msg")
     }
-    private fun showLoge(msg:String){
-        Log.e(javaClass.simpleName,"--->$msg")
+
+    private fun showLoge(msg: String) {
+        Log.e(javaClass.simpleName, "--->$msg")
     }
 }
