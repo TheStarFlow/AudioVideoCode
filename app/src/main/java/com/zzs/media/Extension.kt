@@ -4,7 +4,9 @@ import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
 import android.os.Build
+import android.view.Gravity
 import android.view.View
+import android.widget.Toast
 
 /**
 @author  zzs
@@ -36,6 +38,11 @@ fun Activity.checkPermission(permissions:Array<String>):Boolean{
          )
       }
    }
-
    return false
+}
+
+fun Activity.showToast(msg:String){
+   val toast = Toast.makeText(this,msg,Toast.LENGTH_LONG)
+   toast.setGravity(Gravity.CENTER,0,0)
+   toast.show()
 }

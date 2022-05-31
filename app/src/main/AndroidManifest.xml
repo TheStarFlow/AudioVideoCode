@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.zzs.media">
+    package="com.zzs.media"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -24,6 +26,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".cameraX.CameraXRecordActivity"
+            android:clearTaskOnLaunch="true"
+            android:theme="@style/AppTheme"
+            android:icon="@mipmap/ic_launcher"
+            android:screenOrientation="fullUser"
+            android:rotationAnimation="seamless"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize"
+            tools:targetApi="O"/>
     </application>
 
 </manifest>

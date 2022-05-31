@@ -30,7 +30,7 @@ class RecordToAACActivity : AppCompatActivity() {
     companion object {
         const val AUDIO_SAMPLE_RATE = 44100//采样率
         const val AUDIO_PCM_BIT = AudioFormat.ENCODING_PCM_16BIT//采样位数
-        const val AUDIO_CHANNEL = AudioFormat.CHANNEL_IN_MONO //音频声道 单声道
+        const val AUDIO_CHANNEL = AudioFormat.CHANNEL_IN_STEREO //音频声道 单声道
     }
 
     var pcmFile = ""
@@ -59,12 +59,18 @@ class RecordToAACActivity : AppCompatActivity() {
                 Manifest.permission.RECORD_AUDIO, Manifest.permission.WRITE_EXTERNAL_STORAGE
             )
         )
+        val file = File(path)
+        if (file.exists()) {
+            showFileOutput(file)
+        }
     }
 
     private fun stopRecord() {
         binding.loadingView.root.visibility = View.GONE
-        mAudioRecorder.stop()
-        isRecording = false
+        if (mAudioRecorder.state==AudioRecord.RECORDSTATE_RECORDING){
+            mAudioRecorder.stop()
+            isRecording = false
+        }
     }
 
     private fun startRecord(path: String) {
@@ -166,7 +172,6 @@ class RecordToAACActivity : AppCompatActivity() {
                 showFileOutput(outputFile)
             }
         }
-
     }
 
     private fun showFileOutput(outputFile: File) {
@@ -191,7 +196,7 @@ class RecordToAACActivity : AppCompatActivity() {
             for (i in 0 until count) {
                 val trackFormat = mediaExtractor.getTrackFormat(i)
                 val type = trackFormat.getString(MediaFormat.KEY_MIME)
-                if (type.startsWith("audio/")) {
+                if (type?.startsWith("audio/")==true) {
                     index = i
                     break
                 }
@@ -206,13 +211,13 @@ class RecordToAACActivity : AppCompatActivity() {
 
     private fun decodeAndPlay(mediaExtractor: MediaExtractor, index: Int) {
         val file = File(pcmFile)
-        if (file.exists()){
+        if (file.exists()) {
             file.delete()
         }
         file.createNewFile()
         val channel = FileOutputStream(file).channel
         mediaExtractor.selectTrack(index)
-       // mediaExtractor.seekTo(0,MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        // mediaExtractor.seekTo(0,MediaExtractor.SEEK_TO_CLOSEST_SYNC)
         val format = mediaExtractor.getTrackFormat(index)
         var maxBuffer = 4096
         if (format.containsKey(MediaFormat.KEY_MAX_INPUT_SIZE)) {
@@ -225,33 +230,39 @@ class RecordToAACActivity : AppCompatActivity() {
         val mediaInfo = MediaCodec.BufferInfo()
         mediaCodec.start()
         var inputBufferIndex = -1
+        val count = if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)){
+            format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+        }else{
+            1
+        }
+        val outChannel = if (count>1) AudioFormat.CHANNEL_OUT_STEREO else AudioFormat.CHANNEL_IN_MONO
         val attributeBuilder = AudioAttributes.Builder()
         attributeBuilder.setUsage(AudioAttributes.USAGE_MEDIA)
             .setLegacyStreamType(AudioManager.STREAM_MUSIC)
             .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
         val formatBuilder = AudioFormat.Builder()
         formatBuilder.setSampleRate(format.getInteger(MediaFormat.KEY_SAMPLE_RATE))
-            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+            .setChannelMask(outChannel)
             .setEncoding(AUDIO_PCM_BIT)
         val mini = AudioTrack.getMinBufferSize(
-            AUDIO_SAMPLE_RATE, AudioFormat.CHANNEL_OUT_MONO,
+            AUDIO_SAMPLE_RATE, outChannel,
             AUDIO_PCM_BIT
         )
-        val audioTrack = AudioTrack(
-            AudioManager.STREAM_SYSTEM,
-            format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
-            AudioFormat.CHANNEL_OUT_MONO,
-            AUDIO_PCM_BIT,
-            mini,
-            AudioTrack.MODE_STREAM
-        )
 //        val audioTrack = AudioTrack(
-//            attributeBuilder.build(),
-//            formatBuilder.build(),
-//            miniBufferSize,
-//            AudioTrack.MODE_STREAM,
-//            AudioManager.AUDIO_SESSION_ID_GENERATE
+//            AudioManager.STREAM_MUSIC,
+//            format.getInteger(MediaFormat.KEY_SAMPLE_RATE),
+//            outChannel,
+//            AUDIO_PCM_BIT,
+//            mini,
+//            AudioTrack.MODE_STREAM
 //        )
+        val audioTrack = AudioTrack(
+            attributeBuilder.build(),
+            formatBuilder.build(),
+            mini,
+            AudioTrack.MODE_STREAM,
+            AudioManager.AUDIO_SESSION_ID_GENERATE
+        )
         audioTrack.play()
         var isEnd = false
         while (!isEnd) {
@@ -260,7 +271,7 @@ class RecordToAACActivity : AppCompatActivity() {
                 val inputBuffer = mediaCodec.getInputBuffer(inputBufferIndex)
                 inputBuffer?.clear()
                 val pts = mediaExtractor.sampleTime
-                if (pts.toInt() == -1){
+                if (pts.toInt() == -1) {
                     break
                 }
                 mediaInfo.presentationTimeUs = pts
@@ -275,9 +286,7 @@ class RecordToAACActivity : AppCompatActivity() {
                     mediaInfo.presentationTimeUs,
                     mediaInfo.flags
                 )
-               // showLogI("写入aac数据， len = ${mediaInfo.size},pts = ${mediaInfo.presentationTimeUs}, flags = ${mediaInfo.flags} \n")
-                if (!mediaExtractor.advance()){
-                    isEnd = true
+                if (!mediaExtractor.advance()) {
                     break
                 }
                 var outputBufferIndex = mediaCodec.dequeueOutputBuffer(mediaInfo, 1000)
@@ -304,7 +313,8 @@ class RecordToAACActivity : AppCompatActivity() {
             }
         }
         channel.close()
-        showLogI("写出文件完毕")
+        showLogI("播放完毕")
+        while (audioTrack.playState!=AudioTrack.PLAYSTATE_STOPPED){ }
         audioTrack.stop()
         audioTrack.release()
         mediaCodec.stop()
@@ -354,9 +364,12 @@ class RecordToAACActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        mMediaCodec.release()
-        mAudioRecorder.stop()
-        mAudioRecorder.release()
+        if (this::mMediaCodec.isInitialized){
+            mMediaCodec.release()
+            mAudioRecorder.stop()
+            mAudioRecorder.release()
+        }
+
     }
 
     private fun showLogI(msg: String) {

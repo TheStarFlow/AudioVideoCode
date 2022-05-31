@@ -3,6 +3,7 @@ package com.zzs.media
 import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import com.zzs.media.cameraX.CameraXRecordActivity
 import com.zzs.media.databinding.ActivityMainBinding
 import com.zzs.media.muxer.MuxerMediaActivity
 import com.zzs.media.record2aac.RecordToAACActivity
@@ -29,6 +30,10 @@ class MainActivity:AppCompatActivity() {
       }
       binding.record2aac.onClick {
          startActivity(Intent(this,RecordToAACActivity::class.java))
+      }
+      binding.cameraXRecord.onClick {
+         startActivity(Intent(this,CameraXRecordActivity::class.java))
+
       }
    }
 }
