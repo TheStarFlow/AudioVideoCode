@@ -7,15 +7,15 @@
     android:id="@+id/camera_container"
     >
 
-<!--  <com.zzs.media.cameraX.CameraRenderView-->
-<!--      android:id="@+id/view_finder"-->
-<!--      android:layout_width="match_parent"-->
-<!--      android:layout_height="match_parent"/>-->
-
-  <androidx.camera.view.PreviewView
+  <com.zzs.media.cameraX.CameraRenderView
       android:id="@+id/view_finder"
       android:layout_width="match_parent"
       android:layout_height="match_parent"/>
+
+<!--  <androidx.camera.view.PreviewView-->
+<!--      android:id="@+id/view_finder"-->
+<!--      android:layout_width="match_parent"-->
+<!--      android:layout_height="match_parent"/>-->
 
 
 

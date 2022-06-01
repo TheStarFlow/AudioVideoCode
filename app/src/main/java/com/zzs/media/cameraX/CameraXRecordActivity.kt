@@ -158,7 +158,8 @@ class CameraXRecordActivity : AppCompatActivity() {
                 this, cameraSelector, preview, imageCapture)
 
             // Attach the viewfinder's surface provider to preview use case
-            preview?.setSurfaceProvider(activityBinding.viewFinder.surfaceProvider)
+            activityBinding.viewFinder.attach(preview)
+            preview?.setSurfaceProvider(activityBinding.viewFinder)
             observeCameraState(camera?.cameraInfo!!)
         } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed", exc)
