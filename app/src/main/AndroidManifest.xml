@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.zzs.media"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.zzs.media">
 
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -14,28 +15,31 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.AudioPcm">
-        <activity android:name="com.zzs.media.muxer.MuxerMediaActivity">
-
-        </activity>
-
-        <activity android:name=".record2aac.RecordToAACActivity"/>
-        <activity android:name=".MainActivity">
+        <activity
+            android:name="com.zzs.media.simpleplayer.SimplePlayerActivity"
+            android:exported="false"
+            android:label="@string/title_activity_simple_player"
+            android:theme="@style/Theme.AudioPcm" />
+        <activity android:name="com.zzs.media.muxer.MuxerMediaActivity"></activity>
+        <activity android:name=".record2aac.RecordToAACActivity" />
+        <activity android:name=".MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
-        <activity android:name=".cameraX.CameraXRecordActivity"
+        <activity
+            android:name=".cameraX.CameraXRecordActivity"
             android:clearTaskOnLaunch="true"
-            android:theme="@style/AppTheme"
-            android:icon="@mipmap/ic_launcher"
-            android:screenOrientation="fullUser"
-            android:rotationAnimation="seamless"
-            android:resizeableActivity="true"
             android:configChanges="orientation|screenLayout|screenSize|smallestScreenSize"
-            tools:targetApi="O"/>
+            android:icon="@mipmap/ic_launcher"
+            android:resizeableActivity="true"
+            android:rotationAnimation="seamless"
+            android:screenOrientation="fullUser"
+            android:theme="@style/AppTheme"
+            tools:targetApi="O" />
     </application>
 
 </manifest>
