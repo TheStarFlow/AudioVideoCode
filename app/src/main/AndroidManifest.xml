@@ -18,6 +18,7 @@
         <activity
             android:name="com.zzs.media.simpleplayer.SimplePlayerActivity"
             android:exported="false"
+            android:screenOrientation="landscape"
             android:label="@string/title_activity_simple_player"
             android:theme="@style/Theme.AudioPcm" />
         <activity android:name="com.zzs.media.muxer.MuxerMediaActivity"></activity>

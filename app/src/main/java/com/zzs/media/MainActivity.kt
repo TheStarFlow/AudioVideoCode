@@ -7,6 +7,8 @@ import com.zzs.media.cameraX.CameraXRecordActivity
 import com.zzs.media.databinding.ActivityMainBinding
 import com.zzs.media.muxer.MuxerMediaActivity
 import com.zzs.media.record2aac.RecordToAACActivity
+import com.zzs.media.simpleplayer.SimplePlayer
+import com.zzs.media.simpleplayer.SimplePlayerActivity
 
 /**
 @author  zzs
@@ -34,6 +36,9 @@ class MainActivity:AppCompatActivity() {
       binding.cameraXRecord.onClick {
          startActivity(Intent(this,CameraXRecordActivity::class.java))
 
+      }
+      binding.simplePlayer.onClick {
+         startActivity(Intent(this, SimplePlayerActivity::class.java))
       }
    }
 }

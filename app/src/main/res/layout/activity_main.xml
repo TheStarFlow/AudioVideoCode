@@ -28,5 +28,11 @@
         android:text="CameraX"
         android:textAllCaps="false"
         android:id="@+id/cameraXRecord"/>
+    <com.google.android.material.button.MaterialButton
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="播放器"
+        android:textAllCaps="false"
+        android:id="@+id/simplePlayer"/>
 
 </com.google.android.flexbox.FlexboxLayout>

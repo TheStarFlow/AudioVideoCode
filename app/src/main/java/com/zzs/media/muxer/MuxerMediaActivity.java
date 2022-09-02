@@ -44,7 +44,7 @@ public class MuxerMediaActivity extends AppCompatActivity implements RangeSlider
     private ProgressDialog progressDialog;
     private Executor executor = Executors.newCachedThreadPool();
 
-    private final String videoPath = Environment.getExternalStorageDirectory() + "/video.mp4";
+    private final String videoPath = Environment.getExternalStorageDirectory() + "/demo.mp4";
     private final String bgPath = Environment.getExternalStorageDirectory() + "/bg.mp3";
 
 
@@ -70,7 +70,7 @@ public class MuxerMediaActivity extends AppCompatActivity implements RangeSlider
                 try {
                     File video = new File(videoPath);
                     if (!video.exists()) {
-                        copyAssets("video.mp4", video.getAbsolutePath());
+                        copyAssets("demo.mp4", video.getAbsolutePath());
                     }
                     File bg = new File(bgPath);
                     if (!bg.exists()) {
