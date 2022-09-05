@@ -6,7 +6,6 @@ import android.util.Log
 import android.view.Surface
 import com.zzs.media.logE
 import com.zzs.media.logI
-import com.zzs.media.record2aac.RecordToAACActivity
 import kotlinx.coroutines.*
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -27,8 +26,12 @@ class SimpleMp4Player {
     private var mCurrAudioFormat: MediaFormat? = null
     private var mSurface: Surface? = null
     private val isPlaying = AtomicBoolean(false)
+    private val isPause = AtomicBoolean(false)
     private var audioTrackIndex = -1
     private var videoTrackIndex = -1
+
+    @Volatile
+    private var mSampleTime = 0L
 
 
     fun setSurface(surface: Surface) {
@@ -40,8 +43,17 @@ class SimpleMp4Player {
         mMp4FilePath = path
     }
 
+    fun pause() {
+        isPause.set(true)
+    }
+
+    fun isPlaying() = isPlaying.get() && !isPause.get()
+
     fun start() {
-        if (isPlaying.get()) return
+        if (isPlaying.get()) {
+            isPause.compareAndSet(true, false)
+            return
+        }
         if (mMp4FilePath?.isBlank() == true) {
             logE("文件路径为空")
             return
@@ -81,7 +93,7 @@ class SimpleMp4Player {
             formatCodec = MediaCodec.createDecoderByType(currMIME)
             created = true
         } catch (e: IllegalArgumentException) {
-            logE("$currMIME 不能创建解码器")
+            logE("不能创建 $currMIME 解码器")
             created = false
         } catch (e: IOException) {
             logE("$currMIME 创建解码器失败${e.message}")
@@ -115,9 +127,16 @@ class SimpleMp4Player {
         mediaExtractor.setDataSource(mMp4FilePath!!)
         mediaExtractor.selectTrack(videoTrackIndex)
         while ((!isEndOfStream && isPlaying.get()) && score.isActive) {
+            if (isPause.get()) {
+                Thread.sleep(1)
+                continue
+            }
+            val sampleTime = mediaExtractor.sampleTime
+            if (sampleTime>mSampleTime){
+                continue
+            }
             val inputIndex = videoDecodeC.dequeueInputBuffer(1_000_0)
             if (inputIndex >= 0) {
-                val sampleTime = mediaExtractor.sampleTime
                 logI("video sample time = $sampleTime")
                 val flag = mediaExtractor.sampleFlags
                 if (sampleTime == -1L) break
@@ -154,6 +173,8 @@ class SimpleMp4Player {
             mediaExtractor.release()
         } catch (e: Exception) {
             logE("释放出错：$e")
+        } finally {
+            resetState()
         }
     }
 
@@ -220,6 +241,10 @@ class SimpleMp4Player {
         )
         audioTrack.play()
         while ((!isEndOfStream && isPlaying.get()) && scope.isActive) {
+            if (isPause.get()) {
+                Thread.sleep(1)
+                continue
+            }
             val inputIndex = audioDecodeC.dequeueInputBuffer(1_000_0)
             if (inputIndex > 0) {
                 val audioTime: Long = mediaExtractor.sampleTime
@@ -227,6 +252,7 @@ class SimpleMp4Player {
                 if (audioTime < 0) {
                     break
                 }
+                mSampleTime = audioTime
                 val flag = mediaExtractor.sampleFlags
                 val readLen = mediaExtractor.readSampleData(byteBuffer, 0)
                 val dpsInputBuffer = audioDecodeC.getInputBuffer(inputIndex)
@@ -266,12 +292,19 @@ class SimpleMp4Player {
             audioDecodeC.stop()
             audioDecodeC.release()
             mediaExtractor.release()
-            while (audioTrack.playState!=AudioTrack.PLAYSTATE_STOPPED){ }
             audioTrack.stop()
             audioTrack.release()
         } catch (e: Exception) {
             logE("音频 释放出错：$e")
+        } finally {
+            resetState()
         }
+    }
+
+    private fun resetState() {
+        isPlaying.set(false)
+        isPause.set(false)
+        mSampleTime = 0L
     }
 
 
@@ -280,7 +313,7 @@ class SimpleMp4Player {
             audioTrackIndex = -1
             videoTrackIndex = -1
             mPlayerScore.cancel()
-            isPlaying.set(false)
+            resetState()
         } catch (e: Throwable) {
             logE("释放出错 ${Log.getStackTraceString(e)}")
         }

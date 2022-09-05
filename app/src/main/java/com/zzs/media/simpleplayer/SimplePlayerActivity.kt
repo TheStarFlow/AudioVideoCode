@@ -57,6 +57,8 @@ class SimplePlayerActivity : ComponentActivity(), SurfaceHolder.Callback {
             player.setPath(file.absolutePath)
             if (play) {
                 player.start()
+            } else {
+                player.pause()
             }
         }
     }
