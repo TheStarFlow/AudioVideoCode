@@ -132,6 +132,11 @@ public class MuxerMediaActivity extends AppCompatActivity implements RangeSlider
     private void copyAssets(String assetsName, String path) throws IOException {
         AssetFileDescriptor assetFileDescriptor = getAssets().openFd(assetsName);
         FileChannel from = new FileInputStream(assetFileDescriptor.getFileDescriptor()).getChannel();
+        File file = new File(path);
+        if (!file.exists()){
+            boolean create = file.createNewFile();
+            if (!create)return;
+        }
         FileChannel to = new FileOutputStream(path).getChannel();
         from.transferTo(assetFileDescriptor.getStartOffset(), assetFileDescriptor.getLength(), to);
         from.close();
