@@ -20,8 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 
 class SimplePlayerActivity : ComponentActivity(), SurfaceHolder.Callback {
 
@@ -30,15 +28,26 @@ class SimplePlayerActivity : ComponentActivity(), SurfaceHolder.Callback {
     }
 
     private val player = SimpleMp4Player()
+    private var mDuration = 0L
+    private var mCurrDuration = 0f
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             AudioVideoCodeTheme {
-                SimplePlayer(this) {
+                SimplePlayer(this, {
+                    mCurrDuration = it
+                }, {
+                    player.seekTo((mDuration*1000*mCurrDuration).toLong())
+                }) {
                     playControl(it)
                 }
             }
         }
+        player.setPlayListener(object : IPlayerListener {
+            override fun onFetchMediaInfo(durationMs: Long, width: Int, height: Int) {
+                mDuration = durationMs
+            }
+        })
     }
 
     private fun playControl(play: Boolean) {
@@ -96,7 +105,12 @@ class SimplePlayerActivity : ComponentActivity(), SurfaceHolder.Callback {
 }
 
 @Composable
-fun SimplePlayer(callback: SurfaceHolder.Callback, playAction: (Boolean) -> Unit = {}) {
+fun SimplePlayer(
+    callback: SurfaceHolder.Callback,
+    onSliderAction: ((Float) -> Unit) = {},
+    onSliderChangeFinish: (() -> Unit) = {},
+    playAction: (Boolean) -> Unit = {}
+) {
     Box {
         AndroidView({
             SurfaceView(it).apply {
@@ -109,21 +123,28 @@ fun SimplePlayer(callback: SurfaceHolder.Callback, playAction: (Boolean) -> Unit
                 .align(Alignment.BottomCenter),
             color = Color.Transparent
         ) {
-            UIControlLayer(playAction)
+            UIControlLayer(playAction, onSliderAction, onSliderChangeFinish)
         }
     }
 }
 
+
 @Composable
-fun UIControlLayer(playAction: (Boolean) -> Unit = {}) {
-    var progree by remember { mutableStateOf(0f) }
+fun UIControlLayer(
+    playAction: (Boolean) -> Unit = {},
+    onSliderAction: (Float) -> Unit = {},
+    onSliderChangeFinish: () -> Unit = {}
+) {
     var playState by remember { mutableStateOf(false) }
+    var progree by remember { mutableStateOf(0f) }
     Column {
         Slider(
             value = progree,
             onValueChange = {
                 progree = it
-            }
+                onSliderAction.invoke(it)
+            },
+            onValueChangeFinished = onSliderChangeFinish
         )
         Row(
             horizontalArrangement = Arrangement.Center,
