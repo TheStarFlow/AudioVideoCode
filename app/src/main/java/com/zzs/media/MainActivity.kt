@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.zzs.media.cameraX.CameraXRecordActivity
 import com.zzs.media.databinding.ActivityMainBinding
+import com.zzs.media.ffmpegplayer.FFmpegPlayerActivity
 import com.zzs.media.muxer.MuxerMediaActivity
 import com.zzs.media.record2aac.RecordToAACActivity
 import com.zzs.media.simpleplayer.SimplePlayer
@@ -39,6 +40,9 @@ class MainActivity:AppCompatActivity() {
       }
       binding.simplePlayer.onClick {
          startActivity(Intent(this, SimplePlayerActivity::class.java))
+      }
+      binding.ffmpegPlayer.onClick {
+         startActivity(Intent(this, FFmpegPlayerActivity::class.java))
       }
    }
 }

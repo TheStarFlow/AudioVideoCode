@@ -32,6 +32,9 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity android:name=".ffmpegplayer.FFmpegPlayerActivity"
+            android:exported="false"
+            />
         <activity
             android:name=".cameraX.CameraXRecordActivity"
             android:clearTaskOnLaunch="true"

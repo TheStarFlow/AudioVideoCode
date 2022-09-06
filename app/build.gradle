@@ -21,7 +21,13 @@ android {
         externalNativeBuild {
             cmake {
                 cppFlags "-std=c++11"
+                abiFilters 'armeabi-v7a'
+                arguments "-DANDROID_STL=c++_shared"
             }
+
+        }
+        ndk{
+            abiFilters 'armeabi-v7a'
         }
     }
 
@@ -56,6 +62,11 @@ android {
         cmake {
             path "src/main/cpp/CMakeLists.txt"
             version "3.10.2"
+        }
+    }
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['src/main/cpp/libs']
         }
     }
 }
