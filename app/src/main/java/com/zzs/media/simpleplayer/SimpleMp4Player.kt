@@ -39,8 +39,6 @@ class SimpleMp4Player(private val isSyncDecode: Boolean = false) {
     private lateinit var mAudioMediaExtractor: MediaExtractor
     private var mDuration = 0L
 
-    @Volatile
-    private var mSampleTime = 0L
     private var videoWidth = 0
     private var videoHeight = 0
 
@@ -79,8 +77,16 @@ class SimpleMp4Player(private val isSyncDecode: Boolean = false) {
     fun start() {
         if (isPlaying.get()) {
             isPause.compareAndSet(true, false)
-            mAudioDecodeCallBack?.isPause = isPause.get()
-            mVideoDecodeCallBack?.isPause = isPause.get()
+            if (!isSyncDecode){
+                mDecodeHandler?.post {
+                    mAudioDecodeCallBack?.isPause = isPause.get()
+                    mVideoDecodeCallBack?.isPause = isPause.get()
+                    mAudioCodeC?.flush()
+                    mVideoCodeC?.flush()
+                    mVideoCodeC?.start()
+                    mAudioCodeC?.start()
+                }
+            }
             return
         }
         if (mMp4FilePath?.isBlank() == true) {
@@ -150,18 +156,10 @@ class SimpleMp4Player(private val isSyncDecode: Boolean = false) {
         mPlayerScore.launch(Dispatchers.IO) {
             if (!isPlaying.get()) return@launch
             val seekTo = min(timeUs, mDuration)
-            val isPaused = isPause.get()
-            isPause.compareAndSet(false, true)
             mVideoDecodeCallBack?.isPause = isPause.get()
             mAudioDecodeCallBack?.isPause = isPause.get()
-            mAudioMediaExtractor.seekTo(seekTo, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            mAudioMediaExtractor.seekTo(seekTo, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
             mVideoMediaExtractor.seekTo(seekTo, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
-            mSampleTime = mAudioMediaExtractor.sampleTime
-            if (!isPaused) {
-                isPause.set(false)
-                mVideoDecodeCallBack?.isPause = isPause.get()
-                mAudioDecodeCallBack?.isPause = isPause.get()
-            }
         }
     }
 
@@ -201,9 +199,6 @@ class SimpleMp4Player(private val isSyncDecode: Boolean = false) {
                 continue
             }
             val sampleTime = mVideoMediaExtractor.sampleTime
-            if (sampleTime > mSampleTime) {
-                continue
-            }
             val inputIndex = mVideoCodeC?.dequeueInputBuffer(1_000_0) ?: -1
             if (inputIndex >= 0) {
                 logI("video sample time = $sampleTime")
@@ -320,6 +315,7 @@ class SimpleMp4Player(private val isSyncDecode: Boolean = false) {
 
             }, null)
             mMediaSync.playbackParams = PlaybackParams().setSpeed(1.0f)
+            mMediaSync.syncParams = SyncParams().setSyncSource(SyncParams.SYNC_SOURCE_AUDIO)
             mAudioDecodeCallBack =
                 DecodeCallBack(mAudioMediaExtractor, mMediaSync, isPause.get(), true)
             mAudioCodeC?.setCallback(mAudioDecodeCallBack, mDecodeHandler)
@@ -342,7 +338,6 @@ class SimpleMp4Player(private val isSyncDecode: Boolean = false) {
                 if (audioTime < 0) {
                     break
                 }
-                mSampleTime = audioTime
                 val flag = mAudioMediaExtractor.sampleFlags
                 val readLen = mAudioMediaExtractor.readSampleData(byteBuffer, 0)
                 val dpsInputBuffer = mAudioCodeC?.getInputBuffer(inputIndex)
@@ -394,7 +389,6 @@ class SimpleMp4Player(private val isSyncDecode: Boolean = false) {
     private fun resetState() {
         isPlaying.set(false)
         isPause.set(false)
-        mSampleTime = 0L
     }
 
 
