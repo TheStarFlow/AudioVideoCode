@@ -2,6 +2,9 @@ package com.zzs.media.simpleplayer
 
 import android.media.*
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import com.zzs.media.logE
@@ -19,7 +22,7 @@ import kotlin.math.min
 @describe  简单一把梭
  */
 
-class SimpleMp4Player {
+class SimpleMp4Player(private val isSyncDecode: Boolean = false) {
 
     private val mPlayerScore = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
@@ -41,8 +44,15 @@ class SimpleMp4Player {
     private var videoWidth = 0
     private var videoHeight = 0
 
-    private var mPlayListener: IPlayerListener? = null
+    private var mVideoDecodeCallBack: DecodeCallBack? = null
+    private var mAudioDecodeCallBack: DecodeCallBack? = null
+    private var mVideoCodeC: MediaCodec? = null
+    private var mAudioCodeC: MediaCodec? = null
 
+    private var mPlayListener: IPlayerListener? = null
+    private val mMediaSync by lazy { MediaSync() }
+    private val mDecodeThread = HandlerThread("DecodeCallBackThread")
+    private var mDecodeHandler: Handler? = null
 
     fun setPlayListener(listener: IPlayerListener) {
         mPlayListener = listener
@@ -60,6 +70,8 @@ class SimpleMp4Player {
 
     fun pause() {
         isPause.set(true)
+        mAudioDecodeCallBack?.isPause = true
+        mVideoDecodeCallBack?.isPause = true
     }
 
     fun isPlaying() = isPlaying.get() && !isPause.get()
@@ -67,6 +79,8 @@ class SimpleMp4Player {
     fun start() {
         if (isPlaying.get()) {
             isPause.compareAndSet(true, false)
+            mAudioDecodeCallBack?.isPause = isPause.get()
+            mVideoDecodeCallBack?.isPause = isPause.get()
             return
         }
         if (mMp4FilePath?.isBlank() == true) {
@@ -75,6 +89,7 @@ class SimpleMp4Player {
         }
         if (mSurface == null) {
             logI("render surface null ")
+            if (isSyncDecode) return
         }
         mPlayerScore.launch(Dispatchers.IO + CoroutineName("DecodeCoroutine")) {
             val prepare = prepareDecode()
@@ -113,6 +128,10 @@ class SimpleMp4Player {
         try {
             formatCodec = MediaCodec.createDecoderByType(currMIME)
             created = true
+            if (!isSyncDecode) {
+                mDecodeThread.start()
+                mDecodeHandler = Handler(mDecodeThread.looper)
+            }
         } catch (e: IllegalArgumentException) {
             logE("不能创建 $currMIME 解码器")
             created = false
@@ -133,20 +152,22 @@ class SimpleMp4Player {
             val seekTo = min(timeUs, mDuration)
             val isPaused = isPause.get()
             isPause.compareAndSet(false, true)
+            mVideoDecodeCallBack?.isPause = isPause.get()
+            mAudioDecodeCallBack?.isPause = isPause.get()
             mAudioMediaExtractor.seekTo(seekTo, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             mVideoMediaExtractor.seekTo(seekTo, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
             mSampleTime = mAudioMediaExtractor.sampleTime
             if (!isPaused) {
                 isPause.set(false)
+                mVideoDecodeCallBack?.isPause = isPause.get()
+                mAudioDecodeCallBack?.isPause = isPause.get()
             }
         }
     }
 
     private fun startVideoDecode(score: CoroutineScope) {
-        val videoDecodeC = mCurrVideoFormat?.getString(MediaFormat.KEY_MIME)
+        mVideoCodeC = mCurrVideoFormat?.getString(MediaFormat.KEY_MIME)
             ?.let { MediaCodec.createDecoderByType(it) } ?: return
-        videoDecodeC.configure(mCurrVideoFormat, mSurface, null, 0)
-        videoDecodeC.start()
         var isEndOfStream = false
         val mediaCodecInfo = MediaCodec.BufferInfo()
         var maxBufferSize = 100 * 1000
@@ -162,6 +183,18 @@ class SimpleMp4Player {
         mVideoMediaExtractor = MediaExtractor()
         mVideoMediaExtractor.setDataSource(mMp4FilePath!!)
         mVideoMediaExtractor.selectTrack(videoTrackIndex)
+        if (!isSyncDecode) {
+            mVideoDecodeCallBack = DecodeCallBack(mVideoMediaExtractor, mMediaSync, isPause.get())
+            mVideoCodeC?.setCallback(mVideoDecodeCallBack, mDecodeHandler)
+            mMediaSync.setSurface(mSurface)
+            val surface = mMediaSync.createInputSurface()
+            mVideoCodeC?.configure(mCurrVideoFormat, surface, null, 0)
+            mVideoCodeC?.start()
+            return
+        } else {
+            mVideoCodeC?.configure(mCurrVideoFormat, mSurface, null, 0)
+        }
+        mVideoCodeC?.start()
         while ((!isEndOfStream && isPlaying.get()) && score.isActive) {
             if (isPause.get()) {
                 Thread.sleep(1)
@@ -171,17 +204,17 @@ class SimpleMp4Player {
             if (sampleTime > mSampleTime) {
                 continue
             }
-            val inputIndex = videoDecodeC.dequeueInputBuffer(1_000_0)
+            val inputIndex = mVideoCodeC?.dequeueInputBuffer(1_000_0) ?: -1
             if (inputIndex >= 0) {
                 logI("video sample time = $sampleTime")
                 val flag = mVideoMediaExtractor.sampleFlags
                 if (sampleTime == -1L) break
                 val readSize = mVideoMediaExtractor.readSampleData(byteBuffer, 0)
-                val buffer = videoDecodeC.getInputBuffer(inputIndex)
+                val buffer = mVideoCodeC?.getInputBuffer(inputIndex)
                 buffer?.clear()
                 buffer?.put(byteBuffer)
                 buffer?.position(0)
-                videoDecodeC.queueInputBuffer(
+                mVideoCodeC?.queueInputBuffer(
                     inputIndex,
                     0,
                     readSize,
@@ -189,23 +222,23 @@ class SimpleMp4Player {
                     flag
                 )
                 mVideoMediaExtractor.advance()
-                var outIndex = videoDecodeC.dequeueOutputBuffer(mediaCodecInfo, 1_000_0)
-                while (outIndex >= 0) {
+                var outIndex = mVideoCodeC?.dequeueOutputBuffer(mediaCodecInfo, 1_000_0) ?: -1
+                while (outIndex >= 0 && score.isActive) {
                     if (mediaCodecInfo.flags == MediaCodec.BUFFER_FLAG_END_OF_STREAM) {
                         isEndOfStream = true
                         isEnd = true
                         break
                     }
-                    videoDecodeC.releaseOutputBuffer(outIndex, true)
-                    outIndex = videoDecodeC.dequeueOutputBuffer(mediaCodecInfo, 1_000_0)
+                    mVideoCodeC?.releaseOutputBuffer(outIndex, true)
+                    outIndex = mVideoCodeC?.dequeueOutputBuffer(mediaCodecInfo, 1_000_0) ?: -1
                 }
                 if (isEnd) break
             }
         }
         logI("video decode break")
         try {
-            videoDecodeC.stop()
-            videoDecodeC.release()
+            mVideoCodeC?.stop()
+            mVideoCodeC?.release()
             mVideoMediaExtractor.release()
         } catch (e: Exception) {
             logE("释放出错：$e")
@@ -215,10 +248,8 @@ class SimpleMp4Player {
     }
 
     private fun startAudioDecode(scope: CoroutineScope) {
-        val audioDecodeC = mCurrAudioFormat?.getString(MediaFormat.KEY_MIME)
+        mAudioCodeC = mCurrAudioFormat?.getString(MediaFormat.KEY_MIME)
             ?.let { MediaCodec.createDecoderByType(it) } ?: return
-        audioDecodeC.configure(mCurrAudioFormat, null, null, 0)
-        audioDecodeC.start()
         var isEndOfStream = false
         val mediaCodecInfo = MediaCodec.BufferInfo()
         var maxBufferSize = 100 * 1000
@@ -233,6 +264,7 @@ class SimpleMp4Player {
         mAudioMediaExtractor = MediaExtractor()
         mAudioMediaExtractor.setDataSource(mMp4FilePath!!)
         mAudioMediaExtractor.selectTrack(audioTrackIndex)
+
         //初始化一个audioTrack 播放声音
         val audioFormat = mCurrAudioFormat!!
         //采样率
@@ -275,13 +307,35 @@ class SimpleMp4Player {
             AudioTrack.MODE_STREAM,
             AudioManager.AUDIO_SESSION_ID_GENERATE
         )
+        if (!isSyncDecode) {
+            mMediaSync.setAudioTrack(audioTrack)
+            mMediaSync.setCallback(object : MediaSync.Callback() {
+                override fun onAudioBufferConsumed(
+                    sync: MediaSync,
+                    audioBuffer: ByteBuffer,
+                    bufferId: Int
+                ) {
+                    mAudioCodeC?.releaseOutputBuffer(bufferId, false)
+                }
+
+            }, null)
+            mMediaSync.playbackParams = PlaybackParams().setSpeed(1.0f)
+            mAudioDecodeCallBack =
+                DecodeCallBack(mAudioMediaExtractor, mMediaSync, isPause.get(), true)
+            mAudioCodeC?.setCallback(mAudioDecodeCallBack, mDecodeHandler)
+            mAudioCodeC?.configure(mCurrAudioFormat, null, null, 0)
+            mAudioCodeC?.start()
+            return
+        }
+        mAudioCodeC?.configure(mCurrAudioFormat, null, null, 0)
+        mAudioCodeC?.start()
         audioTrack.play()
         while ((!isEndOfStream && isPlaying.get()) && scope.isActive) {
             if (isPause.get()) {
                 Thread.sleep(1)
                 continue
             }
-            val inputIndex = audioDecodeC.dequeueInputBuffer(1_000_0)
+            val inputIndex = mAudioCodeC?.dequeueInputBuffer(1_000_0) ?: -1
             if (inputIndex > 0) {
                 val audioTime: Long = mAudioMediaExtractor.sampleTime
                 logI("audio sample time = $audioTime")
@@ -291,12 +345,12 @@ class SimpleMp4Player {
                 mSampleTime = audioTime
                 val flag = mAudioMediaExtractor.sampleFlags
                 val readLen = mAudioMediaExtractor.readSampleData(byteBuffer, 0)
-                val dpsInputBuffer = audioDecodeC.getInputBuffer(inputIndex)
+                val dpsInputBuffer = mAudioCodeC?.getInputBuffer(inputIndex)
                 dpsInputBuffer?.clear()
                 dpsInputBuffer?.put(byteBuffer)
                 dpsInputBuffer?.position(0)
                 byteBuffer.flip()
-                audioDecodeC.queueInputBuffer(
+                mAudioCodeC?.queueInputBuffer(
                     inputIndex,
                     0,
                     readLen,
@@ -304,13 +358,13 @@ class SimpleMp4Player {
                     flag
                 )
                 if (!mAudioMediaExtractor.advance()) break
-                var outIndex = audioDecodeC.dequeueOutputBuffer(mediaCodecInfo, 1_000_0)
-                while (outIndex >= 0) {
+                var outIndex = mAudioCodeC?.dequeueOutputBuffer(mediaCodecInfo, 1_000_0) ?: -1
+                while (outIndex >= 0 && scope.isActive) {
                     if (mediaCodecInfo.flags == MediaCodec.BUFFER_FLAG_END_OF_STREAM) {
                         isEndOfStream = true
                         break
                     }
-                    val buffer = audioDecodeC.getOutputBuffer(outIndex)
+                    val buffer = mAudioCodeC?.getOutputBuffer(outIndex)
                     buffer?.position(mediaCodecInfo.offset)
                     buffer?.run {
                         audioTrack.write(
@@ -318,15 +372,15 @@ class SimpleMp4Player {
                             AudioTrack.WRITE_BLOCKING
                         )
                     }
-                    audioDecodeC.releaseOutputBuffer(outIndex, false)
-                    outIndex = audioDecodeC.dequeueOutputBuffer(mediaCodecInfo, 1_000_0)
+                    mAudioCodeC?.releaseOutputBuffer(outIndex, false)
+                    outIndex = mAudioCodeC?.dequeueOutputBuffer(mediaCodecInfo, 1_000_0) ?: -1
                 }
             }
         }
         logI("video decode break")
         try {
-            audioDecodeC.stop()
-            audioDecodeC.release()
+            mAudioCodeC?.stop()
+            mAudioCodeC?.release()
             mAudioMediaExtractor.release()
             audioTrack.stop()
             audioTrack.release()
@@ -345,21 +399,45 @@ class SimpleMp4Player {
 
 
     fun release() {
-        try {
-            audioTrackIndex = -1
-            videoTrackIndex = -1
-            mPlayerScore.cancel()
-            resetState()
-            mPlayListener = null
-            if (this::mAudioMediaExtractor.isInitialized) {
-                mAudioMediaExtractor.release()
+        val invoke = {
+            try {
+                if (!isSyncDecode) {
+                    mMediaSync.playbackParams = PlaybackParams().setSpeed(0.0f)
+                    mMediaSync.setCallback(null, null)
+                    mMediaSync.release()
+                    mVideoCodeC?.setCallback(null)
+                    mAudioCodeC?.setCallback(null)
+                    mAudioCodeC?.stop()
+                    mVideoCodeC?.stop()
+                    mVideoCodeC?.release()
+                    mAudioCodeC?.release()
+                    mVideoCodeC = null
+                    mAudioCodeC = null
+                }
+                audioTrackIndex = -1
+                videoTrackIndex = -1
+                resetState()
+                mPlayListener = null
+                if (this::mAudioMediaExtractor.isInitialized) {
+                    mAudioMediaExtractor.release()
+                }
+                if (this::mVideoMediaExtractor.isInitialized) {
+                    mVideoMediaExtractor.release()
+                }
+            } catch (e: Throwable) {
+                logE("释放出错 ${Log.getStackTraceString(e)}")
+            } finally {
+                mDecodeThread.quit()
+                mPlayerScore.cancel()
             }
-            if (this::mVideoMediaExtractor.isInitialized) {
-                mVideoMediaExtractor.release()
-            }
-        } catch (e: Throwable) {
-            logE("释放出错 ${Log.getStackTraceString(e)}")
         }
+
+        if (mDecodeHandler == null) {
+            invoke.invoke()
+        } else {
+            mDecodeHandler?.post(invoke)
+        }
+
     }
 }
 
