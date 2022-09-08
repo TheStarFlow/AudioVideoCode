@@ -27,7 +27,7 @@ class SimplePlayerActivity : ComponentActivity(), SurfaceHolder.Callback {
         const val FILE_NAME = "demo.mp4"
     }
 
-    private val player = SimpleMp4Player(false)
+    private val player = SimpleMp4Player2()
     private var mDuration = 0L
     private var mCurrDuration = 0f
     override fun onCreate(savedInstanceState: Bundle?) {
