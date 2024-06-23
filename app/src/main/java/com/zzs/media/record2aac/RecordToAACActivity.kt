@@ -1,11 +1,14 @@
 package com.zzs.media.record2aac
 
 import android.Manifest
+import android.content.pm.PackageManager
+import android.content.res.AssetManager
 import android.media.*
 import android.os.Bundle
 import android.util.Log
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.zzs.media.checkPermission
 import com.zzs.media.databinding.ActivityRecord2AacBinding
@@ -266,7 +269,7 @@ class RecordToAACActivity : AppCompatActivity() {
         audioTrack.play()
         var isEnd = false
         while (!isEnd) {
-            inputBufferIndex = mediaCodec.dequeueInputBuffer(1000)
+             inputBufferIndex = mediaCodec.dequeueInputBuffer(1000)
             if (inputBufferIndex >= 0) {
                 val inputBuffer = mediaCodec.getInputBuffer(inputBufferIndex)
                 inputBuffer?.clear()
@@ -351,6 +354,20 @@ class RecordToAACActivity : AppCompatActivity() {
                 "audio config is not support,sample rate :${AUDIO_CHANNEL},channel :${AUDIO_CHANNEL}" +
                         ",audio pcm bit : $AUDIO_PCM_BIT"
             )
+            return
+        }
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.RECORD_AUDIO
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
             return
         }
         mAudioRecorder = AudioRecord(

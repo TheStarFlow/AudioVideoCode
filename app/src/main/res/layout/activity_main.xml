@@ -40,5 +40,17 @@
         android:text="ffmpeg"
         android:textAllCaps="false"
         android:id="@+id/ffmpegPlayer"/>
+    <com.google.android.material.button.MaterialButton
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="蓝牙客户端"
+        android:textAllCaps="false"
+        android:id="@+id/bluetoothClient"/>
+    <com.google.android.material.button.MaterialButton
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="蓝牙服务端"
+        android:textAllCaps="false"
+        android:id="@+id/bluetoothServer"/>
 
 </com.google.android.flexbox.FlexboxLayout>
